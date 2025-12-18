@@ -1,3 +1,395 @@
 # python-
-飞机大战
-需要pygame库
+import pygame
+import random
+import sys
+
+# 初始化pygame
+pygame.init()
+
+# 游戏窗口设置
+WIDTH = 800
+HEIGHT = 600
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("卷轴射击游戏")
+
+# 颜色定义
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+RED = (255, 50, 50)
+GREEN = (50, 255, 100)
+BLUE = (50, 100, 255)
+YELLOW = (255, 255, 50)
+PURPLE = (180, 70, 220)
+
+
+# 玩家类
+class Player:
+    def __init__(self):
+        self.width = 50
+        self.height = 40
+        self.x = WIDTH // 2 - self.width // 2
+        self.y = HEIGHT - self.height - 20
+        self.speed = 7
+        self.color = GREEN
+        self.health = 100
+        self.shoot_cooldown = 0
+        self.score = 0
+
+    def draw(self):
+        # 绘制玩家飞船
+        pygame.draw.polygon(screen, self.color, [
+            (self.x + self.width // 2, self.y),  # 顶部中心
+            (self.x, self.y + self.height),  # 左下
+            (self.x + self.width, self.y + self.height)  # 右下
+        ])
+
+        # 绘制飞船尾翼
+        pygame.draw.rect(screen, YELLOW,
+                         (self.x + self.width // 2 - 5, self.y + self.height, 10, 10))
+
+        # 绘制生命值条
+        pygame.draw.rect(screen, RED, (self.x, self.y - 10, self.width, 5))
+        pygame.draw.rect(screen, GREEN, (self.x, self.y - 10, self.width * (self.health / 100), 5))
+
+    def move(self, keys):
+        if keys[pygame.K_LEFT] and self.x > 0:
+            self.x -= self.speed
+        if keys[pygame.K_RIGHT] and self.x < WIDTH - self.width:
+            self.x += self.speed
+        if keys[pygame.K_UP] and self.y > 0:
+            self.y -= self.speed
+        if keys[pygame.K_DOWN] and self.y < HEIGHT - self.height:
+            self.y += self.speed
+
+    def shoot(self, bullets):
+        if self.shoot_cooldown == 0:
+            bullets.append(Bullet(self.x + self.width // 2, self.y, -10, BLUE, "player"))
+            self.shoot_cooldown = 15
+
+    def update(self):
+        if self.shoot_cooldown > 0:
+            self.shoot_cooldown -= 1
+
+    def get_rect(self):
+        return pygame.Rect(self.x, self.y, self.width, self.height)
+
+
+# 子弹类
+class Bullet:
+    def __init__(self, x, y, speed, color, owner):
+        self.x = x
+        self.y = y
+        self.speed = speed
+        self.radius = 5
+        self.color = color
+        self.owner = owner  # "player" 或 "enemy"
+
+    def draw(self):
+        pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
+
+    def update(self):
+        self.y += self.speed
+
+    def is_off_screen(self):
+        return self.y < -20 or self.y > HEIGHT + 20
+
+    def get_rect(self):
+        return pygame.Rect(self.x - self.radius, self.y - self.radius,
+                           self.radius * 2, self.radius * 2)
+
+
+# 敌人类
+class Enemy:
+    def __init__(self):
+        self.width = random.randint(30, 50)
+        self.height = random.randint(30, 40)
+        self.x = random.randint(0, WIDTH - self.width)
+        self.y = random.randint(-100, -40)
+        self.speed = random.randint(2, 5)
+        self.color = RED
+        self.health = random.randint(1, 3)
+        self.shoot_cooldown = random.randint(30, 90)
+        self.type = random.choice(["normal", "shooter"])
+
+    def draw(self):
+        # 绘制敌人飞船
+        pygame.draw.polygon(screen, self.color, [
+            (self.x + self.width // 2, self.y + self.height),  # 底部中心
+            (self.x, self.y),  # 左上
+            (self.x + self.width, self.y)  # 右上
+        ])
+
+        # 如果是射击型敌人，用不同颜色标识
+        if self.type == "shooter":
+            pygame.draw.circle(screen, PURPLE,
+                               (int(self.x + self.width // 2), int(self.y + self.height // 2)), 8)
+
+    def update(self):
+        self.y += self.speed
+
+        # 随机左右移动
+        if random.random() < 0.02:
+            self.x += random.randint(-10, 10)
+            self.x = max(0, min(WIDTH - self.width, self.x))
+
+        # 射击冷却
+        if self.shoot_cooldown > 0:
+            self.shoot_cooldown -= 1
+
+    def shoot(self, bullets):
+        if self.type == "shooter" and self.shoot_cooldown == 0:
+            bullets.append(Bullet(self.x + self.width // 2, self.y + self.height, 7, PURPLE, "enemy"))
+            self.shoot_cooldown = random.randint(60, 120)
+            return True
+        return False
+
+    def is_off_screen(self):
+        return self.y > HEIGHT + 20
+
+    def get_rect(self):
+        return pygame.Rect(self.x, self.y, self.width, self.height)
+
+
+# 星星背景类
+class Star:
+    def __init__(self):
+        self.x = random.randint(0, WIDTH)
+        self.y = random.randint(0, HEIGHT)
+        self.speed = random.randint(1, 3)
+        self.size = random.randint(1, 3)
+        self.color = (random.randint(200, 255), random.randint(200, 255), random.randint(200, 255))
+
+    def draw(self):
+        pygame.draw.circle(screen, self.color, (self.x, self.y), self.size)
+
+    def update(self):
+        self.y += self.speed
+        if self.y > HEIGHT:
+            self.y = 0
+            self.x = random.randint(0, WIDTH)
+
+
+# 爆炸效果类
+class Explosion:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.radius = 5
+        self.max_radius = 25
+        self.color = YELLOW
+        self.growth_rate = 2
+        self.active = True
+
+    def draw(self):
+        pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.radius)
+
+    def update(self):
+        self.radius += self.growth_rate
+        if self.radius > self.max_radius:
+            self.active = False
+
+
+# 游戏状态
+class Game:
+    def __init__(self):
+        self.player = Player()
+        self.bullets = []
+        self.enemies = []
+        self.stars = []
+        self.explosions = []
+        self.enemy_spawn_timer = 0
+        self.game_over = False
+        self.level = 1
+        self.enemies_per_level = 5
+        self.enemies_defeated = 0
+
+        # 初始化星星背景
+        for _ in range(100):
+            self.stars.append(Star())
+
+    def spawn_enemy(self):
+        if self.enemy_spawn_timer == 0 and len(self.enemies) < 5 + self.level:
+            self.enemies.append(Enemy())
+            self.enemy_spawn_timer = random.randint(30, 90 - self.level * 5)
+
+    def check_collisions(self):
+        # 子弹与敌人碰撞
+        for bullet in self.bullets[:]:
+            if bullet.owner == "player":
+                for enemy in self.enemies[:]:
+                    if bullet.get_rect().colliderect(enemy.get_rect()):
+                        enemy.health -= 1
+                        if bullet in self.bullets:
+                            self.bullets.remove(bullet)
+                        self.explosions.append(Explosion(bullet.x, bullet.y))
+
+                        if enemy.health <= 0:
+                            self.enemies.remove(enemy)
+                            self.player.score += 10
+                            self.enemies_defeated += 1
+                            self.explosions.append(Explosion(
+                                enemy.x + enemy.width // 2,
+                                enemy.y + enemy.height // 2
+                            ))
+                        break
+
+        # 敌人子弹与玩家碰撞
+        for bullet in self.bullets[:]:
+            if bullet.owner == "enemy" and bullet.get_rect().colliderect(self.player.get_rect()):
+                self.bullets.remove(bullet)
+                self.player.health -= 10
+                self.explosions.append(Explosion(bullet.x, bullet.y))
+                if self.player.health <= 0:
+                    self.game_over = True
+
+        # 敌机与玩家碰撞
+        for enemy in self.enemies[:]:
+            if enemy.get_rect().colliderect(self.player.get_rect()):
+                self.enemies.remove(enemy)
+                self.player.health -= 20
+                self.explosions.append(Explosion(
+                    enemy.x + enemy.width // 2,
+                    enemy.y + enemy.height // 2
+                ))
+                self.enemies_defeated += 1
+                if self.player.health <= 0:
+                    self.game_over = True
+
+    def update(self, keys):
+        if self.game_over:
+            return
+
+        # 更新玩家
+        self.player.update()
+        self.player.move(keys)
+
+        # 玩家自动射击
+        if keys[pygame.K_SPACE]:
+            self.player.shoot(self.bullets)
+
+        # 更新子弹
+        for bullet in self.bullets[:]:
+            bullet.update()
+            if bullet.is_off_screen():
+                self.bullets.remove(bullet)
+
+        # 生成敌人
+        if self.enemy_spawn_timer > 0:
+            self.enemy_spawn_timer -= 1
+        self.spawn_enemy()
+
+        # 更新敌人
+        for enemy in self.enemies[:]:
+            enemy.update()
+            enemy.shoot(self.bullets)
+            if enemy.is_off_screen():
+                self.enemies.remove(enemy)
+
+        # 更新星星
+        for star in self.stars:
+            star.update()
+
+        # 更新爆炸效果
+        for explosion in self.explosions[:]:
+            explosion.update()
+            if not explosion.active:
+                self.explosions.remove(explosion)
+
+        # 检查碰撞
+        self.check_collisions()
+
+        # 检查是否升级
+        if self.enemies_defeated >= self.enemies_per_level:
+            self.level += 1
+            self.enemies_defeated = 0
+            self.enemies_per_level += 3
+            self.player.health = min(100, self.player.health + 20)  # 恢复一些生命值
+
+    def draw(self):
+        # 绘制黑色背景
+        screen.fill(BLACK)
+
+        # 绘制星星
+        for star in self.stars:
+            star.draw()
+
+        # 绘制子弹
+        for bullet in self.bullets:
+            bullet.draw()
+
+        # 绘制敌人
+        for enemy in self.enemies:
+            enemy.draw()
+
+        # 绘制玩家
+        self.player.draw()
+
+        # 绘制爆炸效果
+        for explosion in self.explosions:
+            explosion.draw()
+
+        # 绘制游戏信息
+        font = pygame.font.SysFont(None, 28)
+        score_text = font.render(f"分数: {self.player.score}", True, WHITE)
+        level_text = font.render(f"等级: {self.level}", True, WHITE)
+        health_text = font.render(f"生命值: {self.player.health}", True, WHITE)
+
+        screen.blit(score_text, (10, 10))
+        screen.blit(level_text, (10, 40))
+        screen.blit(health_text, (10, 70))
+
+        # 绘制敌人数量
+        enemies_text = font.render(f"敌人: {len(self.enemies)}", True, WHITE)
+        screen.blit(enemies_text, (WIDTH - 120, 10))
+
+        # 绘制控制说明
+        controls_text = font.render("方向键移动, 空格键射击", True, YELLOW)
+        screen.blit(controls_text, (WIDTH // 2 - controls_text.get_width() // 2, HEIGHT - 30))
+
+        # 游戏结束画面
+        if self.game_over:
+            game_over_font = pygame.font.SysFont(None, 72)
+            game_over_text = game_over_font.render("游戏结束!", True, RED)
+            screen.blit(game_over_text, (WIDTH // 2 - game_over_text.get_width() // 2, HEIGHT // 2 - 50))
+
+            restart_font = pygame.font.SysFont(None, 36)
+            restart_text = restart_font.render("按R键重新开始", True, GREEN)
+            screen.blit(restart_text, (WIDTH // 2 - restart_text.get_width() // 2, HEIGHT // 2 + 30))
+
+
+# 主游戏循环
+def main():
+    clock = pygame.time.Clock()
+    game = Game()
+
+    running = True
+    while running:
+        # 处理事件
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r and game.game_over:
+                    game = Game()  # 重新开始游戏
+
+        # 获取按键状态
+        keys = pygame.key.get_pressed()
+
+        # 更新游戏状态
+        game.update(keys)
+
+        # 绘制游戏
+        game.draw()
+
+        # 更新显示
+        pygame.display.flip()
+
+        # 控制帧率
+        clock.tick(60)
+
+    pygame.quit()
+    sys.exit()
+
+
+if __name__ == "__main__":
+    main()
